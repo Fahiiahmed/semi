@@ -77,7 +77,7 @@
                 colX: 11, memInX: -7, memOutX: -1, memC: new THREE.Vector3(-4, 0, 0),
                 paths: {
                     'feed': [new THREE.Vector3(-20, 0, 0), new THREE.Vector3(-7, 0, 0)],
-                    'permeate': [new THREE.Vector3(-7, 0, 0), new THREE.Vector3(-7, 5, 0), new THREE.Vector3(2, 5, 0), new THREE.Vector3(6, 5, 0), new THREE.Vector3(11, 5, 0)],
+                    'permeate': [new THREE.Vector3(-5.5, 1.5, 0), new THREE.Vector3(-5.5, 5, 0), new THREE.Vector3(2, 5, 0), new THREE.Vector3(6, 5, 0), new THREE.Vector3(11, 5, 0)],
                     'retentate': [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(2, 0, 0), new THREE.Vector3(2, -5, 0), new THREE.Vector3(11, -5, 0)]
                 },
                 machinery: [
@@ -95,7 +95,15 @@
                     'feed_main': [new THREE.Vector3(-20, 0, 0), new THREE.Vector3(-14, 0, 0)],
                     'feed_direct': [new THREE.Vector3(-14, 0, 0), new THREE.Vector3(11, 0, 0)],
                     'feed_to_membrane': [new THREE.Vector3(-14, 0, 0), new THREE.Vector3(-14, -6, 0), new THREE.Vector3(-7, -6, 0)],
-                    'permeate': [new THREE.Vector3(-7, -6, 0), new THREE.Vector3(-7, -6, -1.5), new THREE.Vector3(-7, 8, -1.5), new THREE.Vector3(2, 8, -1.5), new THREE.Vector3(2, 8, 0), new THREE.Vector3(6, 8, 0), new THREE.Vector3(11, 8, 0)],
+                    'permeate': [
+                        new THREE.Vector3(-5.5, -4.5, 0), 
+                        new THREE.Vector3(-5.5, -4.5, 1.5), // Z-Jog to pass feed_direct
+                        new THREE.Vector3(-5.5, 8, 1.5), 
+                        new THREE.Vector3(-5.5, 8, 0), 
+                        new THREE.Vector3(2, 8, 0), 
+                        new THREE.Vector3(6, 8, 0), 
+                        new THREE.Vector3(11, 8, 0)
+                    ],
                     'retentate': [new THREE.Vector3(-1, -6, 0), new THREE.Vector3(2, -6, 0), new THREE.Vector3(2, -10, 0), new THREE.Vector3(11, -10, 0)]
                 },
                 machinery: [
@@ -112,14 +120,29 @@
                 colX: -4, memInX: 9, memOutX: 15, memC: new THREE.Vector3(12, -4, 0),
                 paths: {
                     'feed_in': [new THREE.Vector3(-20, -2, 0), new THREE.Vector3(-4, -2, 0)],
-                    'side_draw': [new THREE.Vector3(-4, 2, 0), new THREE.Vector3(4, 2, 0), new THREE.Vector3(9, 2, 0), new THREE.Vector3(9, -4, 0)],
-                    'permeate_return': [new THREE.Vector3(9, -4, 0), new THREE.Vector3(6, -4, 0), new THREE.Vector3(6, -4, 1.5), new THREE.Vector3(6, 8, 1.5), new THREE.Vector3(6, 8, 0), new THREE.Vector3(-4, 8, 0)],
-                    'retentate_return': [new THREE.Vector3(15, -4, 0), new THREE.Vector3(17, -4, 0), new THREE.Vector3(17, -10, 0), new THREE.Vector3(-4, -10, 0)]
+                    // NO INTERSECTIONS: side_draw drops to membrane BEFORE permeate shoots up
+                    'side_draw': [
+                        new THREE.Vector3(-4, 2, 0), 
+                        new THREE.Vector3(5, 2, 0), 
+                        new THREE.Vector3(5, -4, 0), 
+                        new THREE.Vector3(9, -4, 0)
+                    ],
+                    'permeate_return': [
+                        new THREE.Vector3(10.5, -2.5, 0), // Shell-top exit
+                        new THREE.Vector3(10.5, 8, 0), 
+                        new THREE.Vector3(-4, 8, 0)
+                    ],
+                    'retentate_return': [
+                        new THREE.Vector3(15, -4, 0), 
+                        new THREE.Vector3(17, -4, 0), 
+                        new THREE.Vector3(17, -10, 0), 
+                        new THREE.Vector3(-4, -10, 0)
+                    ]
                 },
                 machinery: [
-                    { type: 'heater', pos: new THREE.Vector3(4, 2, 0) },
-                    { type: 'compressor', pos: new THREE.Vector3(2, 8, 0) },
-                    { type: 'cooler', pos: new THREE.Vector3(-1, 8, 0) }
+                    { type: 'heater', pos: new THREE.Vector3(1, 2, 0) }, // Heater on side_draw
+                    { type: 'compressor', pos: new THREE.Vector3(6, 8, 0) }, // Compressor on permeate
+                    { type: 'cooler', pos: new THREE.Vector3(2, 8, 0) }  // Cooler on permeate
                 ]
             }
         };
@@ -301,6 +324,7 @@
             floor.rotation.x = -Math.PI / 2; floor.position.y = -17.1; plantGroup.add(floor);
         }
 
+        // --- ENHANCED FLUID DYNAMICS PARTICLE SYSTEM ---
         function initParticleSystem() {
             const geometry = new THREE.SphereGeometry(0.12, 8, 8); 
             const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -325,8 +349,8 @@
             
             const rand = Math.random();
 
-            // 25% chance to spawn standard feed into pipes
-            if (rand < 0.25) {
+            // 20% chance to spawn standard feed into pipes
+            if (rand < 0.20) {
                 p.mode = 'path'; 
                 p.pathName = currentCase === 'C' ? 'feed_in' : (currentCase === 'B' ? 'feed_main' : 'feed'); 
                 p.targetIdx = 1; 
@@ -334,7 +358,7 @@
                 p.color = COLOR_FEED;
                 p.offset.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6); 
             } 
-            // 75% chance to spawn ambient column filler to perfectly bridge visual gaps
+            // 80% chance to spawn ambient column filler to perfectly bridge visual gaps
             else {
                 const h = -13 + Math.random() * 26; 
                 p.pos.set(cfg.colX + (Math.random()-0.5)*2, h, 0);
@@ -347,8 +371,9 @@
                     p.color = COLOR_RETENTATE;
                     p.mode = Math.random() < 0.5 ? 'vapor_up' : 'liquid_down';
                 } else {
-                    // Mid section: Green rises, Blue falls
-                    if (Math.random() < 0.5) {
+                    // --- CONTINUOUS COLUMN FILLER LOGIC ---
+                    // To include more green particles, modify the probability below (e.g., change 0.80 to 0.95)
+                    if (Math.random() < 0.80) { // <--- INCREASE THIS NUMBER FOR MORE GREEN!
                         p.color = COLOR_PERMEATE; p.mode = 'vapor_up';
                     } else {
                         p.color = COLOR_RETENTATE; p.mode = 'liquid_down';
@@ -384,13 +409,13 @@
                     if (dir.length() < p.speed) {
                         p.pos.copy(targetPos); p.targetIdx++;
                         
-                        // Universal Condenser/Reflux Split
+                        // Universal Condenser/Reflux Split (Phase change only, no color change)
                         if (p.pathName === 'overhead') {
                             if (p.targetIdx === 4 && Math.random() < 0.6) {
                                 p.pathName = 'reflux'; p.targetIdx = 1; 
                             }
                         } 
-                        // Universal Reboiler/Boilup Split
+                        // Universal Reboiler/Boilup Split (Phase change only, no color change)
                         else if (p.pathName === 'bottoms') {
                             if (p.targetIdx === 2 && Math.random() < 0.6) {
                                 p.pathName = 'boilup'; p.targetIdx = 1; 
@@ -440,8 +465,8 @@
                     
                     if (p.willPermeate && ((direction === 1 && p.pos.x >= p.permeateX) || (direction === -1 && p.pos.x <= p.permeateX))) {
                         p.mode = 'membrane_backward'; p.color = COLOR_PERMEATE;
-                        const a = Math.random() * Math.PI * 2; const r = 0.6 + Math.random() * 0.6;
-                        p.offset.set(0, Math.cos(a)*r, Math.sin(a)*r);
+                        const a = Math.random() * Math.PI * 2; const r = 0.8 + Math.random() * 0.4;
+                        p.offset.set(0, Math.cos(a)*r, Math.sin(a)*r); // Visually pop into shell
                     } else if ((direction === 1 && p.pos.x >= cfg.memOutX) || (direction === -1 && p.pos.x <= cfg.memOutX)) {
                         p.pos.x = cfg.memOutX; 
                         p.mode = 'path'; p.pathName = currentCase==='C' ? 'retentate_return' : 'retentate'; p.targetIdx = 1; p.color = COLOR_RETENTATE;
@@ -449,13 +474,19 @@
                     }
 
                 } else if (p.mode === 'membrane_backward') {
-                    const direction = cfg.memOutX > cfg.memInX ? 1 : -1;
-                    p.pos.x -= p.speed * direction; 
+                    // Homing missile to exact shell exit port!
+                    let portPath = currentCase === 'C' ? 'permeate_return' : 'permeate';
+                    let portPos = cfg.paths[portPath][0];
+                    let dir = new THREE.Vector3().subVectors(portPos, p.pos);
                     
-                    if ((direction === 1 && p.pos.x <= cfg.memInX) || (direction === -1 && p.pos.x >= cfg.memInX)) {
-                        p.pos.x = cfg.memInX; 
-                        p.mode = 'path'; p.pathName = currentCase==='C' ? 'permeate_return' : 'permeate'; p.targetIdx = 1;
+                    if (dir.length() < p.speed) {
+                        p.pos.copy(portPos);
+                        p.mode = 'path'; p.pathName = portPath; p.targetIdx = 1;
                         p.offset.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35); 
+                    } else {
+                        p.pos.add(dir.normalize().multiplyScalar(p.speed));
+                        // Funnel effect: shrink offset as it approaches exit pipe
+                        p.offset.lerp(new THREE.Vector3(0,0,0), 0.1); 
                     }
 
                 } else if (p.mode === 'vapor_up') {
@@ -470,15 +501,15 @@
                     }
 
                     // --- TRUE THERMODYNAMICS: Blue Vapor Condenses ---
-                    // "Hardly any blue particles in top 5 or 6 stages" -> Blue vapor cannot survive past y=2
+                    // Prevents blue particles from lingering in the top stages
                     if (p.color.equals(COLOR_RETENTATE)) {
-                        if (Math.random() < 0.01 || p.pos.y > 2) {
+                        if (Math.random() < 0.04 || p.pos.y > 2) {
                             p.mode = 'liquid_down';
                         }
                     }
                     
                     // Case C Side-Draw extraction
-                    if (currentCase === 'C' && p.pos.y > 1.5 && p.pos.y < 3.0 && Math.random() < 0.015) {
+                    if (currentCase === 'C' && p.pos.y > 1.5 && p.pos.y < 3.0 && Math.random() < 0.03) {
                         p.mode = 'path'; p.pathName = 'side_draw'; p.targetIdx = 1; p.color = COLOR_FEED;
                         p.pos.copy(cfg.paths.side_draw[0]);
                         p.offset.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35);
@@ -489,9 +520,9 @@
                 } else if (p.mode === 'liquid_down') {
 
                     // --- TRUE THERMODYNAMICS: Green Liquid Evaporates ---
-                    // "Green liquid will flow to max 1 or 2 top stage" -> Reflux drops from 13, but evaporates before reaching y=8
+                    // Reflux drops from 13, but forces evaporation before reaching lower stages
                     if (p.color.equals(COLOR_PERMEATE)) {
-                        if (Math.random() < 0.01 || p.pos.y < 8) {
+                        if (Math.random() < 0.04 || p.pos.y < 8) {
                             p.mode = 'vapor_up';
                             p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); 
                             p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
