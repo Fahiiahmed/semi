@@ -124,6 +124,15 @@
             }
         };
 
+        // Universal Accessory Paths
+        Object.keys(CONFIG).forEach(k => {
+            const c = CONFIG[k];
+            c.paths['overhead'] = [new THREE.Vector3(c.colX, 14, 0), new THREE.Vector3(c.colX, 17, 0), new THREE.Vector3(c.colX + 5, 17, 0), new THREE.Vector3(c.colX + 7, 15, 0), new THREE.Vector3(c.colX + 12, 15, 0)];
+            c.paths['reflux'] = [new THREE.Vector3(c.colX + 7, 15, 0), new THREE.Vector3(c.colX + 7, 13, 0), new THREE.Vector3(c.colX, 13, 0)];
+            c.paths['bottoms'] = [new THREE.Vector3(c.colX, -15, 0), new THREE.Vector3(c.colX + 3.5, -15, 0), new THREE.Vector3(c.colX + 5, -15, 0), new THREE.Vector3(c.colX + 12, -15, 0)];
+            c.paths['boilup'] = [new THREE.Vector3(c.colX + 3.5, -15, 0), new THREE.Vector3(c.colX + 3.5, -13, 0), new THREE.Vector3(c.colX, -13, 0)];
+        });
+
         // --- GLOBAL VARIABLES ---
         let scene, camera, renderer, controls, plantGroup, particleMesh;
         const MAX_PARTICLES = 14000; 
@@ -158,7 +167,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.shadowMap.enabled = true;
-            renderer.domElement.style.touchAction = 'none'; // CRITICAL: Fixes mobile scrolling bug
+            renderer.domElement.style.touchAction = 'none'; 
             container.appendChild(renderer.domElement);
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -172,9 +181,8 @@
             controls.dampingFactor = 0.05;
 
             initParticleSystem();
-            switchCase('A'); // Load default
+            switchCase('A'); 
 
-            // Zoom Slider Event
             document.getElementById('zoomSlider').addEventListener('input', (e) => {
                 camera.fov = parseFloat(e.target.value);
                 camera.updateProjectionMatrix();
@@ -188,12 +196,10 @@
             currentCase = caseId;
             const cfg = CONFIG[caseId];
 
-            // Update UI
             document.getElementById('ui-title').innerText = cfg.title;
             document.getElementById('ui-desc').innerText = cfg.desc;
             document.getElementById('ui-legend-yellow').innerText = cfg.legendYellow;
 
-            // Reset Buttons
             ['A', 'B', 'C'].forEach(id => {
                 const btn = document.getElementById(`btn-${id}`);
                 if(id === caseId) {
@@ -203,10 +209,8 @@
                 }
             });
 
-            // Adjust Camera Target naturally
             controls.target.set(cfg.camTargetX, 0, 0);
 
-            // Clear old infrastructure and particles
             while(plantGroup.children.length > 0){ 
                 plantGroup.remove(plantGroup.children[0]); 
             }
@@ -216,7 +220,6 @@
         }
 
         function buildInfrastructure(cfg) {
-            // Draw Pipe function scoped to plantGroup
             function drawPipe(p1, p2, r) {
                 const dist = p1.distanceTo(p2); if(dist === 0) return;
                 const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, dist, 16), glassMat);
@@ -228,22 +231,17 @@
                 plantGroup.add(joint);
             }
 
-            // Draw Paths
-            Object.values(cfg.paths).forEach(pathArray => {
+            Object.keys(cfg.paths).forEach(pathName => {
+                const pathArray = cfg.paths[pathName];
+                let r = 0.3;
+                if(pathName.includes('feed')) r = 0.45;
+                if(pathName === 'side_draw') r = 0.35;
+                if(pathName === 'reflux') r = 0.15;
+                if(pathName === 'boilup') r = 0.2;
                 for(let i=0; i<pathArray.length - 1; i++) {
-                    drawPipe(pathArray[i], pathArray[i+1], 0.35); // slightly standardized thickness
+                    drawPipe(pathArray[i], pathArray[i+1], r);
                 }
             });
-
-            // Universal Accessories Paths
-            const pCond = [new THREE.Vector3(cfg.colX, 14, 0), new THREE.Vector3(cfg.colX, 17, 0), new THREE.Vector3(cfg.colX + 5, 17, 0), new THREE.Vector3(cfg.colX + 7, 15, 0), new THREE.Vector3(cfg.colX + 12, 15, 0)];
-            const pReb = [new THREE.Vector3(cfg.colX, -15, 0), new THREE.Vector3(cfg.colX + 5, -15, 0), new THREE.Vector3(cfg.colX + 12, -15, 0)];
-            for(let i=0; i<pCond.length-1; i++) drawPipe(pCond[i], pCond[i+1], 0.3);
-            for(let i=0; i<pReb.length-1; i++) drawPipe(pReb[i], pReb[i+1], 0.3);
-            drawPipe(new THREE.Vector3(cfg.colX+7, 15, 0), new THREE.Vector3(cfg.colX+7, 13, 0), 0.15);
-            drawPipe(new THREE.Vector3(cfg.colX+7, 13, 0), new THREE.Vector3(cfg.colX, 13, 0), 0.15);
-            drawPipe(new THREE.Vector3(cfg.colX+3.5, -15, 0), new THREE.Vector3(cfg.colX+3.5, -13, 0), 0.2);
-            drawPipe(new THREE.Vector3(cfg.colX+3.5, -13, 0), new THREE.Vector3(cfg.colX, -13, 0), 0.2);
 
             // Column Generation
             const col = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 28, 32), glassMat);
@@ -272,13 +270,12 @@
                 ring.position.set(cfg.colX, y, 0); ring.rotation.x = Math.PI / 2; plantGroup.add(ring);
             }
 
-            // Top/Bottom Units
-            const cGeo = new THREE.CylinderGeometry(1.4, 1.4, 4, 32);
-            const condenser = new THREE.Mesh(cGeo, metalMat); condenser.rotation.z = Math.PI/2; condenser.position.set(cfg.colX+5, 17, 0); plantGroup.add(condenser);
+            // Universal Accessories
+            const condenser = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 4, 32), metalMat); condenser.rotation.z = Math.PI/2; condenser.position.set(cfg.colX+5, 17, 0); plantGroup.add(condenser);
             const drum = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 3, 32), darkMetalMat); drum.position.set(cfg.colX+7, 15, 0); plantGroup.add(drum);
             const reboiler = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 5, 32), darkMetalMat); reboiler.rotation.z = Math.PI/2; reboiler.position.set(cfg.colX+5, -15, 0); plantGroup.add(reboiler);
 
-            // Build Membrane
+            // Membrane
             const mem = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 6, 32), glassMat);
             mem.rotation.z = Math.PI / 2; mem.position.copy(cfg.memC); plantGroup.add(mem);
             const c1 = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 1, 32), darkMetalMat); c1.rotation.z = Math.PI/2; c1.position.set(cfg.memC.x-2.5, cfg.memC.y, 0); plantGroup.add(c1);
@@ -289,7 +286,7 @@
                 fiber.position.set(cfg.memC.x, r * Math.sin(theta) + cfg.memC.y, r * Math.cos(theta)); plantGroup.add(fiber);
             }
 
-            // Dynamic Machinery Placement
+            // Machinery Placement
             cfg.machinery.forEach(m => {
                 let mesh;
                 if(m.type === 'valve') mesh = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), darkMetalMat);
@@ -299,13 +296,11 @@
                 if(mesh) { mesh.position.copy(m.pos); plantGroup.add(mesh); }
             });
 
-            // Grid & Floor
             const grid = new THREE.GridHelper(100, 100, 0x334155, 0x0f172a); grid.position.y = -17; plantGroup.add(grid);
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x020617, roughness: 0.8 }));
             floor.rotation.x = -Math.PI / 2; floor.position.y = -17.1; plantGroup.add(floor);
         }
 
-        // --- UNIFIED FLUID DYNAMICS ENGINE ---
         function initParticleSystem() {
             const geometry = new THREE.SphereGeometry(0.12, 8, 8); 
             const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -317,7 +312,7 @@
                 particles.push({
                     active: false, mode: 'path', pathName: 'feed', targetIdx: 1, pos: new THREE.Vector3(),
                     offset: new THREE.Vector3(), color: COLOR_FEED, speed: 0.15 + (Math.random() * 0.08),
-                    willPermeate: false, permeateX: 0, colTargetX: 0, colTargetZ: 0, isFiller: false
+                    willPermeate: false, permeateX: 0, colTargetX: 0, colTargetZ: 0
                 });
             }
         }
@@ -326,40 +321,43 @@
             const p = particles.find(p => !p.active);
             if (!p) return;
             const cfg = CONFIG[currentCase];
-            p.active = true; p.isFiller = false; p.offset.set(0,0,0);
+            p.active = true; p.offset.set(0,0,0);
+            
             const rand = Math.random();
 
-            if (currentCase === 'A') {
-                if (rand < 0.70) {
-                    p.mode = 'path'; p.pathName = 'feed'; p.targetIdx = 1; p.pos.copy(cfg.paths.feed[0]); p.color = COLOR_FEED;
-                    p.offset.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6); 
-                } else if (rand < 0.85) {
-                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 5, 0); p.color = COLOR_RETENTATE; p.isFiller = true;
+            // 25% chance to spawn standard feed into pipes
+            if (rand < 0.25) {
+                p.mode = 'path'; 
+                p.pathName = currentCase === 'C' ? 'feed_in' : (currentCase === 'B' ? 'feed_main' : 'feed'); 
+                p.targetIdx = 1; 
+                p.pos.copy(cfg.paths[p.pathName][0]); 
+                p.color = COLOR_FEED;
+                p.offset.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6); 
+            } 
+            // 75% chance to spawn ambient column filler to perfectly bridge visual gaps
+            else {
+                const h = -13 + Math.random() * 26; 
+                p.pos.set(cfg.colX + (Math.random()-0.5)*2, h, 0);
+                
+                // Pure Green at Top, Pure Blue at Bottom, Mixed in Middle
+                if (h >= 8) {
+                    p.color = COLOR_PERMEATE;
+                    p.mode = Math.random() < 0.5 ? 'vapor_up' : 'liquid_down';
+                } else if (h <= 2) {
+                    p.color = COLOR_RETENTATE;
+                    p.mode = Math.random() < 0.5 ? 'vapor_up' : 'liquid_down';
                 } else {
-                    p.mode = 'vapor_up'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, -5, 0); p.color = COLOR_PERMEATE; p.isFiller = true;
-                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                    // Mid section: Green rises, Blue falls
+                    if (Math.random() < 0.5) {
+                        p.color = COLOR_PERMEATE; p.mode = 'vapor_up';
+                    } else {
+                        p.color = COLOR_RETENTATE; p.mode = 'liquid_down';
+                    }
                 }
-            } else if (currentCase === 'B') {
-                if (rand < 0.60) {
-                    p.mode = 'path'; p.pathName = 'feed_main'; p.targetIdx = 1; p.pos.copy(cfg.paths.feed_main[0]); p.color = COLOR_FEED;
-                    p.offset.set((Math.random()-0.5)*0.7, (Math.random()-0.5)*0.7, (Math.random()-0.5)*0.7); 
-                } else if (rand < 0.75) {
-                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 8, 0); p.color = COLOR_RETENTATE; p.isFiller = true;
-                } else if (rand < 0.85) {
-                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 0, 0); p.color = COLOR_RETENTATE; p.isFiller = true;
-                } else {
-                    p.mode = 'vapor_up'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, (rand<0.92)?-10:0, 0); p.color = COLOR_PERMEATE; p.isFiller = true;
-                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
-                }
-            } else if (currentCase === 'C') {
-                if (rand < 0.40) {
-                    p.mode = 'path'; p.pathName = 'feed_in'; p.targetIdx = 1; p.pos.copy(cfg.paths.feed_in[0]); p.color = COLOR_FEED;
-                    p.offset.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6); 
-                } else if (rand < 0.70) {
-                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 12.5, 0); p.color = COLOR_RETENTATE;
-                } else {
-                    p.mode = 'vapor_up'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, -13.5, 0); p.color = COLOR_PERMEATE;
-                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+
+                if (p.mode === 'vapor_up') {
+                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); 
+                    p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
                 }
             }
         }
@@ -367,7 +365,7 @@
         function updateParticles() {
             const cfg = CONFIG[currentCase];
             const dummy = new THREE.Object3D();
-            spawnAccumulator += 12; // Universal dense spawn rate
+            spawnAccumulator += 12; 
             while(spawnAccumulator > 1) { spawnParticle(); spawnAccumulator -= 1; }
 
             for (let i = 0; i < MAX_PARTICLES; i++) {
@@ -386,16 +384,38 @@
                     if (dir.length() < p.speed) {
                         p.pos.copy(targetPos); p.targetIdx++;
                         
-                        if (p.targetIdx >= currentPath.length) { // End of pipe logic mapped to Active Case
+                        // Universal Condenser/Reflux Split
+                        if (p.pathName === 'overhead') {
+                            if (p.targetIdx === 4 && Math.random() < 0.6) {
+                                p.pathName = 'reflux'; p.targetIdx = 1; 
+                            }
+                        } 
+                        // Universal Reboiler/Boilup Split
+                        else if (p.pathName === 'bottoms') {
+                            if (p.targetIdx === 2 && Math.random() < 0.6) {
+                                p.pathName = 'boilup'; p.targetIdx = 1; 
+                            }
+                        }
+
+                        if (p.targetIdx >= currentPath.length) { 
                             p.offset.set(0,0,0);
                             
-                            if(p.pathName.includes('feed')) {
+                            // Re-entry from Universal Accessories
+                            if (p.pathName === 'reflux') {
+                                p.mode = 'liquid_down'; 
+                            } else if (p.pathName === 'boilup') {
+                                p.mode = 'vapor_up'; 
+                                p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); 
+                                p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                            }
+                            // Case-Specific Entry Logic
+                            else if(p.pathName.includes('feed')) {
                                 if (currentCase === 'A' || p.pathName === 'feed_to_membrane') {
                                     p.mode = 'membrane_forward'; p.willPermeate = (Math.random() < 0.5); p.permeateX = cfg.memInX + 0.5 + Math.random() * 5.0; 
                                 } else if (currentCase === 'B' && p.pathName === 'feed_main') {
                                     p.pathName = (Math.random() < 0.5) ? 'feed_direct' : 'feed_to_membrane'; p.targetIdx = 1;
                                     p.offset.set((Math.random() - 0.5)*0.4, (Math.random() - 0.5)*0.4, (Math.random() - 0.5)*0.4);
-                                } else { // Enters column
+                                } else { 
                                     p.mode = (Math.random() < 0.5) ? 'vapor_up' : 'liquid_down'; p.color = p.mode === 'vapor_up' ? COLOR_PERMEATE : COLOR_RETENTATE;
                                     p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
                                 }
@@ -406,7 +426,9 @@
                                 p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
                             } else if (p.pathName.includes('retentate')) {
                                 p.mode = 'liquid_down';
-                            } else p.active = false;
+                            } else {
+                                p.active = false; 
+                            }
                         }
                     } else {
                         p.pos.add(dir.normalize().multiplyScalar(p.speed));
@@ -446,18 +468,36 @@
                     if (Math.abs(p.pos.y - nearestTray) < 0.2) {
                         p.pos.x += (Math.random() - 0.5) * 0.15; p.pos.z += (Math.random() - 0.5) * 0.15;
                     }
+
+                    // --- TRUE THERMODYNAMICS: Blue Vapor Condenses ---
+                    // "Hardly any blue particles in top 5 or 6 stages" -> Blue vapor cannot survive past y=2
+                    if (p.color.equals(COLOR_RETENTATE)) {
+                        if (Math.random() < 0.01 || p.pos.y > 2) {
+                            p.mode = 'liquid_down';
+                        }
+                    }
                     
-                    if (currentCase === 'C' && p.pos.y > 1.5 && p.pos.y < 2.5 && Math.random() < 0.05 && !p.isFiller) {
+                    // Case C Side-Draw extraction
+                    if (currentCase === 'C' && p.pos.y > 1.5 && p.pos.y < 3.0 && Math.random() < 0.015) {
                         p.mode = 'path'; p.pathName = 'side_draw'; p.targetIdx = 1; p.color = COLOR_FEED;
                         p.pos.copy(cfg.paths.side_draw[0]);
                         p.offset.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35);
-                    } else if (p.isFiller && ((currentCase==='A' && p.pos.y>=5) || (currentCase==='B' && (p.pos.y===0||p.pos.y>=8)))) {
-                        p.active = false;
                     } else if (p.pos.y >= 14) {
-                        p.mode = 'path'; p.pathName = 'overhead'; p.targetIdx = 1; p.pos.copy(new THREE.Vector3(cfg.colX, 14, 0));
+                        p.mode = 'path'; p.pathName = 'overhead'; p.targetIdx = 1; p.pos.copy(cfg.paths.overhead[0]);
                     }
 
                 } else if (p.mode === 'liquid_down') {
+
+                    // --- TRUE THERMODYNAMICS: Green Liquid Evaporates ---
+                    // "Green liquid will flow to max 1 or 2 top stage" -> Reflux drops from 13, but evaporates before reaching y=8
+                    if (p.color.equals(COLOR_PERMEATE)) {
+                        if (Math.random() < 0.01 || p.pos.y < 8) {
+                            p.mode = 'vapor_up';
+                            p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); 
+                            p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                        }
+                    }
+
                     let trayBelowY = Math.floor((p.pos.y + 0.1) / 2) * 2; 
                     if (trayBelowY < -12) trayBelowY = -12;
 
@@ -482,10 +522,8 @@
                     const distFromCenter = Math.sqrt(Math.pow(p.pos.x - cfg.colX, 2) + Math.pow(p.pos.z, 2));
                     if (distFromCenter > 2.6) { p.pos.x += (cfg.colX - p.pos.x) * 0.1; p.pos.z *= 0.9; }
                     
-                    if (p.isFiller && ((currentCase==='A' && p.pos.y<=-5) || (currentCase==='B' && (p.pos.y===0||p.pos.y<=-10)))) {
-                        p.active = false;
-                    } else if (p.pos.y <= -15) {
-                        p.mode = 'path'; p.pathName = 'bottoms'; p.targetIdx = 1; p.pos.copy(new THREE.Vector3(cfg.colX, -15, 0));
+                    if (p.pos.y <= -15) {
+                        p.mode = 'path'; p.pathName = 'bottoms'; p.targetIdx = 1; p.pos.copy(cfg.paths.bottoms[0]);
                     }
                 }
 
