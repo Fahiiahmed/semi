@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Gas Separation - Master Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #020617; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; touch-action: none; outline: none; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        /* Custom Range Slider */
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #fff; cursor: pointer; margin-top: -6px; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #475569; border-radius: 2px; }
+    </style>
+</head>
+<body class="text-slate-200">
+
+    <div id="canvas-container"></div>
+
+    <!-- Top Navigation Bar -->
+    <div class="absolute top-6 left-0 right-0 flex justify-center z-20 pointer-events-auto">
+        <div class="bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 p-1.5 rounded-full shadow-[0_0_30px_rgba(0,0,0,0.6)] flex gap-2">
+            <button onclick="switchCase('A')" id="btn-A" class="px-6 py-2 rounded-full text-sm font-bold font-mono transition-all duration-300 bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.6)]">CASE A</button>
+            <button onclick="switchCase('B')" id="btn-B" class="px-6 py-2 rounded-full text-sm font-bold font-mono transition-all duration-300 text-slate-400 hover:text-white hover:bg-slate-800">CASE B</button>
+            <button onclick="switchCase('C')" id="btn-C" class="px-6 py-2 rounded-full text-sm font-bold font-mono transition-all duration-300 text-slate-400 hover:text-white hover:bg-slate-800">CASE C</button>
+        </div>
+    </div>
+
+    <!-- Dynamic Info Panel -->
+    <div class="absolute top-24 left-6 bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 p-5 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10 pointer-events-none">
+        <h1 id="ui-title" class="text-base font-bold text-white mb-2 tracking-wider font-mono uppercase">CASE A: PRE-SEPARATION</h1>
+        <p id="ui-desc" class="text-[10px] text-slate-400 mb-5 font-mono max-w-[200px]">Raw feed is entirely separated in the membrane before entering the column stages.</p>
+
+        <!-- Legends -->
+        <div class="space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.8)]"></div>
+                <span id="ui-legend-yellow" class="text-sm font-medium text-slate-300">Raw Mix (Gas)</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
+                <span class="text-sm font-medium text-slate-300">Propylene (Vapor)</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
+                <span class="text-sm font-medium text-slate-300">Propane (Liquid)</span>
+            </div>
+        </div>
+        
+        <div class="mt-6 pt-4 border-t border-slate-700/50 text-[10px] text-slate-500 text-left">
+            Drag to Rotate • Right-Click to Pan
+        </div>
+    </div>
+
+    <!-- Zoom Controller -->
+    <div class="absolute bottom-8 right-8 w-48 bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 p-4 rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.5)] z-20 pointer-events-auto">
+        <div class="flex justify-between items-center mb-2">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Camera Zoom</label>
+        </div>
+        <input type="range" id="zoomSlider" min="15" max="80" value="45" class="w-full">
+    </div>
+
+    <script>
+        // --- MASTER CONFIGURATIONS ---
+        const CONFIG = {
+            'A': {
+                title: "CASE A: PRE-SEPARATION",
+                desc: "Raw feed is fully processed in the membrane before entering the distillation column stages.",
+                legendYellow: "Raw Mix (Gas)",
+                camTargetX: 4,
+                colX: 11, memInX: -7, memOutX: -1, memC: new THREE.Vector3(-4, 0, 0),
+                paths: {
+                    'feed': [new THREE.Vector3(-20, 0, 0), new THREE.Vector3(-7, 0, 0)],
+                    'permeate': [new THREE.Vector3(-7, 0, 0), new THREE.Vector3(-7, 5, 0), new THREE.Vector3(2, 5, 0), new THREE.Vector3(6, 5, 0), new THREE.Vector3(11, 5, 0)],
+                    'retentate': [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(2, 0, 0), new THREE.Vector3(2, -5, 0), new THREE.Vector3(11, -5, 0)]
+                },
+                machinery: [
+                    { type: 'compressor', pos: new THREE.Vector3(2, 5, 0) },
+                    { type: 'cooler', pos: new THREE.Vector3(6, 5, 0) }
+                ]
+            },
+            'B': {
+                title: "CASE B: 50/50 SPLIT",
+                desc: "Feed splits equally between direct mid-column entry and the membrane purification unit.",
+                legendYellow: "Raw Mix (Gas)",
+                camTargetX: 4,
+                colX: 11, memInX: -7, memOutX: -1, memC: new THREE.Vector3(-4, -6, 0),
+                paths: {
+                    'feed_main': [new THREE.Vector3(-20, 0, 0), new THREE.Vector3(-14, 0, 0)],
+                    'feed_direct': [new THREE.Vector3(-14, 0, 0), new THREE.Vector3(11, 0, 0)],
+                    'feed_to_membrane': [new THREE.Vector3(-14, 0, 0), new THREE.Vector3(-14, -6, 0), new THREE.Vector3(-7, -6, 0)],
+                    'permeate': [new THREE.Vector3(-7, -6, 0), new THREE.Vector3(-7, -6, -1.5), new THREE.Vector3(-7, 8, -1.5), new THREE.Vector3(2, 8, -1.5), new THREE.Vector3(2, 8, 0), new THREE.Vector3(6, 8, 0), new THREE.Vector3(11, 8, 0)],
+                    'retentate': [new THREE.Vector3(-1, -6, 0), new THREE.Vector3(2, -6, 0), new THREE.Vector3(2, -10, 0), new THREE.Vector3(11, -10, 0)]
+                },
+                machinery: [
+                    { type: 'valve', pos: new THREE.Vector3(-14, 0, 0) },
+                    { type: 'compressor', pos: new THREE.Vector3(2, 8, 0) },
+                    { type: 'cooler', pos: new THREE.Vector3(6, 8, 0) }
+                ]
+            },
+            'C': {
+                title: "CASE C: SIDE-STREAM",
+                desc: "Feed enters left. Side-draw extracted from right, purified via kidney loop, and recycled.",
+                legendYellow: "Raw / Side-Draw Mix",
+                camTargetX: 0,
+                colX: -4, memInX: 9, memOutX: 15, memC: new THREE.Vector3(12, -4, 0),
+                paths: {
+                    'feed_in': [new THREE.Vector3(-20, -2, 0), new THREE.Vector3(-4, -2, 0)],
+                    'side_draw': [new THREE.Vector3(-4, 2, 0), new THREE.Vector3(4, 2, 0), new THREE.Vector3(9, 2, 0), new THREE.Vector3(9, -4, 0)],
+                    'permeate_return': [new THREE.Vector3(9, -4, 0), new THREE.Vector3(6, -4, 0), new THREE.Vector3(6, -4, 1.5), new THREE.Vector3(6, 8, 1.5), new THREE.Vector3(6, 8, 0), new THREE.Vector3(-4, 8, 0)],
+                    'retentate_return': [new THREE.Vector3(15, -4, 0), new THREE.Vector3(17, -4, 0), new THREE.Vector3(17, -10, 0), new THREE.Vector3(-4, -10, 0)]
+                },
+                machinery: [
+                    { type: 'heater', pos: new THREE.Vector3(4, 2, 0) },
+                    { type: 'compressor', pos: new THREE.Vector3(2, 8, 0) },
+                    { type: 'cooler', pos: new THREE.Vector3(-1, 8, 0) }
+                ]
+            }
+        };
+
+        // --- GLOBAL VARIABLES ---
+        let scene, camera, renderer, controls, plantGroup, particleMesh;
+        const MAX_PARTICLES = 14000; 
+        let particles = [];
+        let currentCase = 'A';
+        let spawnAccumulator = 0;
+        
+        const COLOR_FEED = new THREE.Color(0xfacc15); 
+        const COLOR_PERMEATE = new THREE.Color(0x10b981); 
+        const COLOR_RETENTATE = new THREE.Color(0x3b82f6); 
+
+        // Materials
+        const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xe2e8f0, roughness: 0.05, transmission: 0.95, transparent: true, opacity: 1, side: THREE.DoubleSide });
+        const metalMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7, roughness: 0.2 });
+        const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.4 });
+        const blackMetalMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.5 });
+        const fiberMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.8 });
+        const copperMat = new THREE.MeshStandardMaterial({ color: 0xcd7f32, metalness: 0.6, roughness: 0.3 }); 
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x020617, 0.012);
+            
+            plantGroup = new THREE.Group();
+            scene.add(plantGroup);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 40);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.domElement.style.touchAction = 'none'; // CRITICAL: Fixes mobile scrolling bug
+            container.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dl = new THREE.DirectionalLight(0xffffff, 2.5);
+            dl.position.set(10, 20, 15);
+            dl.castShadow = true;
+            scene.add(dl);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            initParticleSystem();
+            switchCase('A'); // Load default
+
+            // Zoom Slider Event
+            document.getElementById('zoomSlider').addEventListener('input', (e) => {
+                camera.fov = parseFloat(e.target.value);
+                camera.updateProjectionMatrix();
+            });
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        function switchCase(caseId) {
+            currentCase = caseId;
+            const cfg = CONFIG[caseId];
+
+            // Update UI
+            document.getElementById('ui-title').innerText = cfg.title;
+            document.getElementById('ui-desc').innerText = cfg.desc;
+            document.getElementById('ui-legend-yellow').innerText = cfg.legendYellow;
+
+            // Reset Buttons
+            ['A', 'B', 'C'].forEach(id => {
+                const btn = document.getElementById(`btn-${id}`);
+                if(id === caseId) {
+                    btn.className = "px-6 py-2 rounded-full text-sm font-bold font-mono transition-all duration-300 bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.6)]";
+                } else {
+                    btn.className = "px-6 py-2 rounded-full text-sm font-bold font-mono transition-all duration-300 text-slate-400 hover:text-white hover:bg-slate-800";
+                }
+            });
+
+            // Adjust Camera Target naturally
+            controls.target.set(cfg.camTargetX, 0, 0);
+
+            // Clear old infrastructure and particles
+            while(plantGroup.children.length > 0){ 
+                plantGroup.remove(plantGroup.children[0]); 
+            }
+            particles.forEach(p => p.active = false); 
+
+            buildInfrastructure(cfg);
+        }
+
+        function buildInfrastructure(cfg) {
+            // Draw Pipe function scoped to plantGroup
+            function drawPipe(p1, p2, r) {
+                const dist = p1.distanceTo(p2); if(dist === 0) return;
+                const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, dist, 16), glassMat);
+                mesh.position.copy(p1).lerp(p2, 0.5);
+                mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), p2.clone().sub(p1).normalize());
+                plantGroup.add(mesh);
+                const joint = new THREE.Mesh(new THREE.SphereGeometry(r * 1.2, 16, 16), metalMat);
+                joint.position.copy(p2);
+                plantGroup.add(joint);
+            }
+
+            // Draw Paths
+            Object.values(cfg.paths).forEach(pathArray => {
+                for(let i=0; i<pathArray.length - 1; i++) {
+                    drawPipe(pathArray[i], pathArray[i+1], 0.35); // slightly standardized thickness
+                }
+            });
+
+            // Universal Accessories Paths
+            const pCond = [new THREE.Vector3(cfg.colX, 14, 0), new THREE.Vector3(cfg.colX, 17, 0), new THREE.Vector3(cfg.colX + 5, 17, 0), new THREE.Vector3(cfg.colX + 7, 15, 0), new THREE.Vector3(cfg.colX + 12, 15, 0)];
+            const pReb = [new THREE.Vector3(cfg.colX, -15, 0), new THREE.Vector3(cfg.colX + 5, -15, 0), new THREE.Vector3(cfg.colX + 12, -15, 0)];
+            for(let i=0; i<pCond.length-1; i++) drawPipe(pCond[i], pCond[i+1], 0.3);
+            for(let i=0; i<pReb.length-1; i++) drawPipe(pReb[i], pReb[i+1], 0.3);
+            drawPipe(new THREE.Vector3(cfg.colX+7, 15, 0), new THREE.Vector3(cfg.colX+7, 13, 0), 0.15);
+            drawPipe(new THREE.Vector3(cfg.colX+7, 13, 0), new THREE.Vector3(cfg.colX, 13, 0), 0.15);
+            drawPipe(new THREE.Vector3(cfg.colX+3.5, -15, 0), new THREE.Vector3(cfg.colX+3.5, -13, 0), 0.2);
+            drawPipe(new THREE.Vector3(cfg.colX+3.5, -13, 0), new THREE.Vector3(cfg.colX, -13, 0), 0.2);
+
+            // Column Generation
+            const col = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 28, 32), glassMat);
+            col.position.set(cfg.colX, 0, 0); plantGroup.add(col);
+            
+            const dome = new THREE.SphereGeometry(2.8, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+            const tDome = new THREE.Mesh(dome, blackMetalMat); tDome.position.set(cfg.colX, 14, 0); plantGroup.add(tDome);
+            const bDome = new THREE.Mesh(dome, blackMetalMat); bDome.position.set(cfg.colX, -14, 0); bDome.rotation.x = Math.PI; plantGroup.add(bDome);
+
+            const a = Math.acos(0.65); const chordDist = 2.8 * 0.65;
+            const shapeRight = new THREE.Shape();
+            shapeRight.absarc(0, 0, 2.75, a, 2*Math.PI - a, false);
+            shapeRight.lineTo(chordDist, Math.sin(a)*2.75);
+            const trayGeoR = new THREE.ExtrudeGeometry(shapeRight, { depth: 0.1, bevelEnabled: false, curveSegments: 32 }); trayGeoR.rotateX(Math.PI / 2);
+            const trayGeoL = trayGeoR.clone(); trayGeoL.rotateY(Math.PI);
+            const baffleGeo = new THREE.PlaneGeometry(2 * Math.sin(a) * 2.75, 1.8);
+
+            for(let y = -12; y <= 12; y += 2) {
+                const isR = (Math.abs(y)/2) % 2 === 0;
+                const tray = new THREE.Mesh(isR ? trayGeoR : trayGeoL, darkMetalMat);
+                tray.position.set(cfg.colX, y, 0); plantGroup.add(tray);
+                const baf = new THREE.Mesh(baffleGeo, darkMetalMat);
+                baf.position.set(cfg.colX + (isR ? chordDist : -chordDist), y - 0.9, 0);
+                baf.rotation.y = Math.PI / 2; baf.material.side = THREE.DoubleSide; plantGroup.add(baf);
+                const ring = new THREE.Mesh(new THREE.TorusGeometry(2.9, 0.08, 8, 32), metalMat);
+                ring.position.set(cfg.colX, y, 0); ring.rotation.x = Math.PI / 2; plantGroup.add(ring);
+            }
+
+            // Top/Bottom Units
+            const cGeo = new THREE.CylinderGeometry(1.4, 1.4, 4, 32);
+            const condenser = new THREE.Mesh(cGeo, metalMat); condenser.rotation.z = Math.PI/2; condenser.position.set(cfg.colX+5, 17, 0); plantGroup.add(condenser);
+            const drum = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 3, 32), darkMetalMat); drum.position.set(cfg.colX+7, 15, 0); plantGroup.add(drum);
+            const reboiler = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 5, 32), darkMetalMat); reboiler.rotation.z = Math.PI/2; reboiler.position.set(cfg.colX+5, -15, 0); plantGroup.add(reboiler);
+
+            // Build Membrane
+            const mem = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 6, 32), glassMat);
+            mem.rotation.z = Math.PI / 2; mem.position.copy(cfg.memC); plantGroup.add(mem);
+            const c1 = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 1, 32), darkMetalMat); c1.rotation.z = Math.PI/2; c1.position.set(cfg.memC.x-2.5, cfg.memC.y, 0); plantGroup.add(c1);
+            const c2 = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 1, 32), darkMetalMat); c2.rotation.z = Math.PI/2; c2.position.set(cfg.memC.x+2.5, cfg.memC.y, 0); plantGroup.add(c2);
+            for(let i=0; i<40; i++) {
+                const fiber = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 5.5, 8), fiberMat);
+                fiber.rotation.z = Math.PI / 2; const r = Math.random() * 1.3; const theta = Math.random() * Math.PI * 2;
+                fiber.position.set(cfg.memC.x, r * Math.sin(theta) + cfg.memC.y, r * Math.cos(theta)); plantGroup.add(fiber);
+            }
+
+            // Dynamic Machinery Placement
+            cfg.machinery.forEach(m => {
+                let mesh;
+                if(m.type === 'valve') mesh = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), darkMetalMat);
+                if(m.type === 'heater') { mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 2.5, 32), copperMat); mesh.rotation.z = Math.PI/2; }
+                if(m.type === 'compressor') { mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.4, 2.5, 4), darkMetalMat); mesh.rotation.z = -Math.PI/2; mesh.rotation.x = Math.PI/4; }
+                if(m.type === 'cooler') { mesh = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 2.5, 32), metalMat); mesh.rotation.z = Math.PI/2; }
+                if(mesh) { mesh.position.copy(m.pos); plantGroup.add(mesh); }
+            });
+
+            // Grid & Floor
+            const grid = new THREE.GridHelper(100, 100, 0x334155, 0x0f172a); grid.position.y = -17; plantGroup.add(grid);
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: 0x020617, roughness: 0.8 }));
+            floor.rotation.x = -Math.PI / 2; floor.position.y = -17.1; plantGroup.add(floor);
+        }
+
+        // --- UNIFIED FLUID DYNAMICS ENGINE ---
+        function initParticleSystem() {
+            const geometry = new THREE.SphereGeometry(0.12, 8, 8); 
+            const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            particleMesh = new THREE.InstancedMesh(geometry, material, MAX_PARTICLES);
+            particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            scene.add(particleMesh);
+
+            for (let i = 0; i < MAX_PARTICLES; i++) {
+                particles.push({
+                    active: false, mode: 'path', pathName: 'feed', targetIdx: 1, pos: new THREE.Vector3(),
+                    offset: new THREE.Vector3(), color: COLOR_FEED, speed: 0.15 + (Math.random() * 0.08),
+                    willPermeate: false, permeateX: 0, colTargetX: 0, colTargetZ: 0, isFiller: false
+                });
+            }
+        }
+
+        function spawnParticle() {
+            const p = particles.find(p => !p.active);
+            if (!p) return;
+            const cfg = CONFIG[currentCase];
+            p.active = true; p.isFiller = false; p.offset.set(0,0,0);
+            const rand = Math.random();
+
+            if (currentCase === 'A') {
+                if (rand < 0.70) {
+                    p.mode = 'path'; p.pathName = 'feed'; p.targetIdx = 1; p.pos.copy(cfg.paths.feed[0]); p.color = COLOR_FEED;
+                    p.offset.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6); 
+                } else if (rand < 0.85) {
+                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 5, 0); p.color = COLOR_RETENTATE; p.isFiller = true;
+                } else {
+                    p.mode = 'vapor_up'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, -5, 0); p.color = COLOR_PERMEATE; p.isFiller = true;
+                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                }
+            } else if (currentCase === 'B') {
+                if (rand < 0.60) {
+                    p.mode = 'path'; p.pathName = 'feed_main'; p.targetIdx = 1; p.pos.copy(cfg.paths.feed_main[0]); p.color = COLOR_FEED;
+                    p.offset.set((Math.random()-0.5)*0.7, (Math.random()-0.5)*0.7, (Math.random()-0.5)*0.7); 
+                } else if (rand < 0.75) {
+                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 8, 0); p.color = COLOR_RETENTATE; p.isFiller = true;
+                } else if (rand < 0.85) {
+                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 0, 0); p.color = COLOR_RETENTATE; p.isFiller = true;
+                } else {
+                    p.mode = 'vapor_up'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, (rand<0.92)?-10:0, 0); p.color = COLOR_PERMEATE; p.isFiller = true;
+                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                }
+            } else if (currentCase === 'C') {
+                if (rand < 0.40) {
+                    p.mode = 'path'; p.pathName = 'feed_in'; p.targetIdx = 1; p.pos.copy(cfg.paths.feed_in[0]); p.color = COLOR_FEED;
+                    p.offset.set((Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6, (Math.random()-0.5)*0.6); 
+                } else if (rand < 0.70) {
+                    p.mode = 'liquid_down'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, 12.5, 0); p.color = COLOR_RETENTATE;
+                } else {
+                    p.mode = 'vapor_up'; p.pos.set(cfg.colX + (Math.random()-0.5)*2, -13.5, 0); p.color = COLOR_PERMEATE;
+                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                }
+            }
+        }
+
+        function updateParticles() {
+            const cfg = CONFIG[currentCase];
+            const dummy = new THREE.Object3D();
+            spawnAccumulator += 12; // Universal dense spawn rate
+            while(spawnAccumulator > 1) { spawnParticle(); spawnAccumulator -= 1; }
+
+            for (let i = 0; i < MAX_PARTICLES; i++) {
+                const p = particles[i];
+                if (!p.active) {
+                    dummy.position.set(9999, 9999, 9999); dummy.updateMatrix(); particleMesh.setMatrixAt(i, dummy.matrix); continue;
+                }
+
+                if (p.mode === 'path') {
+                    const currentPath = cfg.paths[p.pathName];
+                    if (!currentPath || p.targetIdx >= currentPath.length) { p.active = false; continue; }
+
+                    const targetPos = currentPath[p.targetIdx];
+                    const dir = new THREE.Vector3().subVectors(targetPos, p.pos);
+                    
+                    if (dir.length() < p.speed) {
+                        p.pos.copy(targetPos); p.targetIdx++;
+                        
+                        if (p.targetIdx >= currentPath.length) { // End of pipe logic mapped to Active Case
+                            p.offset.set(0,0,0);
+                            
+                            if(p.pathName.includes('feed')) {
+                                if (currentCase === 'A' || p.pathName === 'feed_to_membrane') {
+                                    p.mode = 'membrane_forward'; p.willPermeate = (Math.random() < 0.5); p.permeateX = cfg.memInX + 0.5 + Math.random() * 5.0; 
+                                } else if (currentCase === 'B' && p.pathName === 'feed_main') {
+                                    p.pathName = (Math.random() < 0.5) ? 'feed_direct' : 'feed_to_membrane'; p.targetIdx = 1;
+                                    p.offset.set((Math.random() - 0.5)*0.4, (Math.random() - 0.5)*0.4, (Math.random() - 0.5)*0.4);
+                                } else { // Enters column
+                                    p.mode = (Math.random() < 0.5) ? 'vapor_up' : 'liquid_down'; p.color = p.mode === 'vapor_up' ? COLOR_PERMEATE : COLOR_RETENTATE;
+                                    p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                                }
+                            } else if (p.pathName === 'side_draw') {
+                                p.mode = 'membrane_forward'; p.willPermeate = (Math.random() < 0.6); p.permeateX = cfg.memInX + 0.5 + Math.random() * 5.0;
+                            } else if (p.pathName.includes('permeate')) {
+                                p.mode = (currentCase === 'C') ? 'liquid_down' : 'vapor_up';
+                                p.colTargetX = cfg.colX + Math.cos(Math.random()*Math.PI*2) * (Math.random()*2.2); p.colTargetZ = Math.sin(Math.random()*Math.PI*2) * (Math.random()*2.2);
+                            } else if (p.pathName.includes('retentate')) {
+                                p.mode = 'liquid_down';
+                            } else p.active = false;
+                        }
+                    } else {
+                        p.pos.add(dir.normalize().multiplyScalar(p.speed));
+                    }
+
+                } else if (p.mode === 'membrane_forward') {
+                    const direction = cfg.memOutX > cfg.memInX ? 1 : -1;
+                    p.pos.x += p.speed * direction; 
+                    
+                    if (p.willPermeate && ((direction === 1 && p.pos.x >= p.permeateX) || (direction === -1 && p.pos.x <= p.permeateX))) {
+                        p.mode = 'membrane_backward'; p.color = COLOR_PERMEATE;
+                        const a = Math.random() * Math.PI * 2; const r = 0.6 + Math.random() * 0.6;
+                        p.offset.set(0, Math.cos(a)*r, Math.sin(a)*r);
+                    } else if ((direction === 1 && p.pos.x >= cfg.memOutX) || (direction === -1 && p.pos.x <= cfg.memOutX)) {
+                        p.pos.x = cfg.memOutX; 
+                        p.mode = 'path'; p.pathName = currentCase==='C' ? 'retentate_return' : 'retentate'; p.targetIdx = 1; p.color = COLOR_RETENTATE;
+                        p.offset.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35); 
+                    }
+
+                } else if (p.mode === 'membrane_backward') {
+                    const direction = cfg.memOutX > cfg.memInX ? 1 : -1;
+                    p.pos.x -= p.speed * direction; 
+                    
+                    if ((direction === 1 && p.pos.x <= cfg.memInX) || (direction === -1 && p.pos.x >= cfg.memInX)) {
+                        p.pos.x = cfg.memInX; 
+                        p.mode = 'path'; p.pathName = currentCase==='C' ? 'permeate_return' : 'permeate'; p.targetIdx = 1;
+                        p.offset.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35); 
+                    }
+
+                } else if (p.mode === 'vapor_up') {
+                    p.pos.y += p.speed * 0.6; 
+                    if (p.colTargetX !== 0) {
+                        p.pos.x += (p.colTargetX - p.pos.x) * 0.05; p.pos.z += (p.colTargetZ - p.pos.z) * 0.05;
+                    }
+                    
+                    let nearestTray = Math.round(p.pos.y / 2) * 2;
+                    if (Math.abs(p.pos.y - nearestTray) < 0.2) {
+                        p.pos.x += (Math.random() - 0.5) * 0.15; p.pos.z += (Math.random() - 0.5) * 0.15;
+                    }
+                    
+                    if (currentCase === 'C' && p.pos.y > 1.5 && p.pos.y < 2.5 && Math.random() < 0.05 && !p.isFiller) {
+                        p.mode = 'path'; p.pathName = 'side_draw'; p.targetIdx = 1; p.color = COLOR_FEED;
+                        p.pos.copy(cfg.paths.side_draw[0]);
+                        p.offset.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35);
+                    } else if (p.isFiller && ((currentCase==='A' && p.pos.y>=5) || (currentCase==='B' && (p.pos.y===0||p.pos.y>=8)))) {
+                        p.active = false;
+                    } else if (p.pos.y >= 14) {
+                        p.mode = 'path'; p.pathName = 'overhead'; p.targetIdx = 1; p.pos.copy(new THREE.Vector3(cfg.colX, 14, 0));
+                    }
+
+                } else if (p.mode === 'liquid_down') {
+                    let trayBelowY = Math.floor((p.pos.y + 0.1) / 2) * 2; 
+                    if (trayBelowY < -12) trayBelowY = -12;
+
+                    const isRightDowncomer = (Math.abs(trayBelowY) % 4 === 0);
+                    const weirX = cfg.colX + (isRightDowncomer ? 1.5 : -1.5);
+                    const overDowncomer = isRightDowncomer ? (p.pos.x > weirX) : (p.pos.x < weirX);
+                    
+                    if (overDowncomer) {
+                        p.pos.y -= p.speed * 0.9;
+                        const gapCenter = cfg.colX + (isRightDowncomer ? 2.2 : -2.2);
+                        p.pos.x += (gapCenter - p.pos.x) * 0.08; p.pos.z += (0 - p.pos.z) * 0.02;
+                    } else {
+                        if (p.pos.y > trayBelowY + 0.15) {
+                            p.pos.y -= p.speed * 0.9;
+                        } else {
+                            p.pos.y = trayBelowY + 0.1 + (Math.random() * 0.05);
+                            p.pos.x += (isRightDowncomer ? 1 : -1) * p.speed * 0.6; 
+                            p.pos.z += (Math.sin(p.pos.x * 5) * 0.1) + (Math.random() - 0.5) * 0.1;
+                        }
+                    }
+
+                    const distFromCenter = Math.sqrt(Math.pow(p.pos.x - cfg.colX, 2) + Math.pow(p.pos.z, 2));
+                    if (distFromCenter > 2.6) { p.pos.x += (cfg.colX - p.pos.x) * 0.1; p.pos.z *= 0.9; }
+                    
+                    if (p.isFiller && ((currentCase==='A' && p.pos.y<=-5) || (currentCase==='B' && (p.pos.y===0||p.pos.y<=-10)))) {
+                        p.active = false;
+                    } else if (p.pos.y <= -15) {
+                        p.mode = 'path'; p.pathName = 'bottoms'; p.targetIdx = 1; p.pos.copy(new THREE.Vector3(cfg.colX, -15, 0));
+                    }
+                }
+
+                dummy.position.copy(p.pos);
+                if (p.mode === 'path' || p.mode.includes('membrane')) dummy.position.add(p.offset);
+                dummy.updateMatrix(); particleMesh.setMatrixAt(i, dummy.matrix); particleMesh.setColorAt(i, p.color);
+            }
+            particleMesh.instanceMatrix.needsUpdate = true; particleMesh.instanceColor.needsUpdate = true;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateParticles();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = function() { init(); };
+    </script>
+</body>
+</html>
